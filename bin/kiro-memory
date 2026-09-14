@@ -8,6 +8,11 @@ set -euo pipefail
 
 MEM_DIR="${KIRO_MEMORY_DIR:-$HOME/.kiro/memory}"
 INDEX="${KIRO_MEMORY_INDEX:-$HOME/.kiro/steering/00-memory-index.md}"
+# 索引に載せる project/reference の上限。0 なら無制限(既定)。
+# 溢れた分は FULL_INDEX に全件書き出し、grep で引けるようにする。
+# feedback/user は件数が少なく重要度が高いので常に全件載せる。
+INDEX_MAX="${KIRO_MEMORY_INDEX_MAX:-0}"
+FULL_INDEX="${KIRO_MEMORY_FULL_INDEX:-$HOME/.kiro/memory-index-full.md}"
 mkdir -p "$MEM_DIR" "$(dirname "$INDEX")"
 
 usage() {
@@ -90,7 +95,7 @@ cmd_index() {
         fm=0; done=1
         if (n=="") n=slug
         if (t=="") t="project"
-        rows[t] = rows[t] "- `" n "` — " d (u=="" ? "" : "  (" u ")") "\n"
+        c++; N[c]=n; D[c]=d; T[c]=t; U[c]=u
         next
       }
       fm {
@@ -100,15 +105,46 @@ cmd_index() {
         else if (match($0, /^updated:[ \t]*/))     u=substr($0, RLENGTH+1)
       }
       END {
+        # updated の降順に並べる(単純挿入ソート。件数が多くないので十分)
+        for (i=2; i<=c; i++) {
+          kn=N[i]; kd=D[i]; kt=T[i]; ku=U[i]; j=i-1
+          while (j>=1 && U[j] < ku) { N[j+1]=N[j]; D[j+1]=D[j]; T[j+1]=T[j]; U[j+1]=U[j]; j-- }
+          N[j+1]=kn; D[j+1]=kd; T[j+1]=kt; U[j+1]=ku
+        }
+        for (i=1; i<=c; i++) {
+          line = "- `" N[i] "` — " D[i] (U[i]=="" ? "" : "  (" U[i] ")") "\n"
+          full[T[i]] = full[T[i]] line
+          capped = (max > 0 && (T[i]=="project" || T[i]=="reference"))
+          if (capped) {
+            shown[T[i]]++
+            if (shown[T[i]] > max) { omitted[T[i]]++; continue }
+          }
+          rows[T[i]] = rows[T[i]] line
+        }
+
         split("project feedback user reference", order, " ")
         for (i=1; i<=4; i++) {
           k=order[i]
-          if (k in rows) printf "## %s\n\n%s\n", k, rows[k]
+          if (k in rows) {
+            printf "## %s\n\n%s", k, rows[k]
+            if (omitted[k] > 0) printf "- ...他 %d 件(古い順に省略)\n", omitted[k]
+            printf "\n"
+          }
           delete rows[k]
         }
         for (k in rows) printf "## %s\n\n%s\n", k, rows[k]   # 想定外の type も落とさない
+
+        # 全件は別ファイルへ(steering ではないのでコンテキストには入らない)
+        if (fullpath != "") {
+          printf "# 記憶の全件索引\n\n" > fullpath
+          printf "索引から省略された記憶もここには載っている。grep で探すこと。\n\n" > fullpath
+          for (i=1; i<=4; i++) {
+            k=order[i]
+            if (k in full) printf "## %s\n\n%s\n", k, full[k] > fullpath
+          }
+        }
       }
-    ' "$MEM_DIR"/*.md)"
+    ' max="$INDEX_MAX" fullpath="$FULL_INDEX" "$MEM_DIR"/*.md)"
   fi
 
   if [[ -n "$body" ]]; then
