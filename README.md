@@ -172,9 +172,20 @@ JSON のキー名が不明なので、`hook-remember-nudge` は入力全体か�
 フォールバックを持たせてある。動かない場合は
 `~/.kiro/hooks/kiro-kit.json` の `trigger` 名を実際のものに直せばよい。
 
-IDE では steering の `inclusion` が `always` 以外も機能する
-（CLI は公式に非対応）。`fileMatch` と `fileMatchPattern` を使えば
-「Go を触るときだけこのルール」といった出し分けができる。
+### steering の inclusion は always のままにする
+
+IDE は `inclusion` の全モード（`always` / `fileMatch` / `manual` / `auto`）に対応しているが、
+**CLI は `always` しか読まない。それ以外は条件つきで入るのではなく、丸ごと除外される。**
+
+| inclusion | IDE | CLI |
+|---|---|---|
+| `always` | 常に入る | 常に入る |
+| `fileMatch` / `manual` / `auto` | 条件つきで入る | **一切入らない** |
+
+配布する steering を `fileMatch` にすると、CLI で使っている人にはそのルールが
+完全に消える。**チームで共有するファイルは `always` のままにすること。**
+出し分けたいなら、IDE 専用と割り切った別ファイルとして各自のワークスペース
+（`.kiro/steering/`）に置く。
 
 ## 期待値について
 
