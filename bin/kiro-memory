@@ -19,6 +19,7 @@ kiro-memory <command>
   list                              一覧（slug / type / description）
   rm <slug>                         削除
   index                             steering インデックスを再生成
+  doctor [--stale-days N]           棚卸しの材料を洗い出す(重複候補・古い記憶・冗長なサマリ)
   path                              メモリディレクトリのパスを表示
 
 type: user | feedback | project | reference
@@ -81,7 +82,7 @@ cmd_index() {
   local body=""
   if compgen -G "$MEM_DIR/*.md" >/dev/null; then
     body="$(awk '
-      FNR==1 { fm=0; n=""; d=""; t=""; done=0
+      FNR==1 { fm=0; n=""; d=""; t=""; u=""; done=0
                slug=FILENAME; sub(/.*\//,"",slug); sub(/\.md$/,"",slug) }
       done { next }
       FNR==1 && $0=="---" { fm=1; next }
@@ -89,13 +90,14 @@ cmd_index() {
         fm=0; done=1
         if (n=="") n=slug
         if (t=="") t="project"
-        rows[t] = rows[t] "- `" n "` — " d "\n"
+        rows[t] = rows[t] "- `" n "` — " d (u=="" ? "" : "  (" u ")") "\n"
         next
       }
       fm {
         if (match($0, /^name:[ \t]*/))             n=substr($0, RLENGTH+1)
         else if (match($0, /^description:[ \t]*/)) d=substr($0, RLENGTH+1)
         else if (match($0, /^type:[ \t]*/))        t=substr($0, RLENGTH+1)
+        else if (match($0, /^updated:[ \t]*/))     u=substr($0, RLENGTH+1)
       }
       END {
         split("project feedback user reference", order, " ")
@@ -118,6 +120,85 @@ cmd_index() {
   echo "index: $INDEX"
 }
 
+# 棚卸しの材料を機械的に洗い出す。判断も削除もしない — 出すだけ。
+# 何を統合し何を消すかは memory-gc skill 側でモデルが決め、必ず人に確認する。
+cmd_doctor() {
+  local stale_days=180
+  while [[ $# -gt 0 ]]; do
+    case "$1" in
+      --stale-days) stale_days="${2:?days required}"; shift 2 ;;
+      *) echo "unknown option: $1" >&2; exit 1 ;;
+    esac
+  done
+  compgen -G "$MEM_DIR/*.md" >/dev/null || { echo "記憶がありません"; return 0; }
+
+  local cutoff
+  if date -v-1d +%F >/dev/null 2>&1; then cutoff="$(date -v-${stale_days}d +%F)"   # BSD
+  else cutoff="$(date -d "${stale_days} days ago" +%F)"; fi                        # GNU
+
+  awk -v cutoff="$cutoff" -v days="$stale_days" '
+    FNR==1 { fm=0; n=""; d=""; t=""; u=""; done=0
+             slug=FILENAME; sub(/.*\//,"",slug); sub(/\.md$/,"",slug) }
+    done { next }
+    FNR==1 && $0=="---" { fm=1; next }
+    fm && $0=="---" {
+      fm=0; done=1
+      if (n=="") n=slug
+      c++; name[c]=n; desc[c]=d; type[c]=t; upd[c]=u
+      next
+    }
+    fm {
+      if (match($0, /^name:[ \t]*/))             n=substr($0, RLENGTH+1)
+      else if (match($0, /^description:[ \t]*/)) d=substr($0, RLENGTH+1)
+      else if (match($0, /^type:[ \t]*/))        t=substr($0, RLENGTH+1)
+      else if (match($0, /^updated:[ \t]*/))     u=substr($0, RLENGTH+1)
+    }
+    END {
+      printf "# 記憶の棚卸し材料 (全 %d 件)\n\n", c
+
+      # 1. 更新が古いもの
+      printf "## %d日以上更新されていない (%s 以前)\n\n", days, cutoff
+      stale=0
+      for (i=1; i<=c; i++) if (upd[i] != "" && upd[i] < cutoff) {
+        printf "- `%s` (%s) — %s\n", name[i], upd[i], desc[i]; stale++
+      }
+      if (!stale) print "(なし)"
+      print ""
+
+      # 2. 重複候補: slug のトークンが2語以上一致
+      print "## 重複候補 (slug のトークンが2語以上共通)"
+      print ""
+      dup=0
+      for (i=1; i<=c; i++) {
+        ni=split(name[i], ti, "-")
+        for (j=i+1; j<=c; j++) {
+          nj=split(name[j], tj, "-"); shared=0
+          for (a=1; a<=ni; a++) for (b=1; b<=nj; b++)
+            if (length(ti[a])>2 && ti[a]==tj[b]) shared++
+          if (shared >= 2) { printf "- `%s` <-> `%s`\n", name[i], name[j]; dup++ }
+        }
+      }
+      if (!dup) print "(なし)"
+      print ""
+
+      # 3. サマリが長いもの(索引を圧迫する)
+      print "## description が長い (80文字超)"
+      print ""
+      lng=0
+      for (i=1; i<=c; i++) {
+        L=length(desc[i])
+        if (L > 80) { printf "- `%s` (%d文字)\n", name[i], L; lng++ }
+      }
+      if (!lng) print "(なし)"
+      print ""
+
+      printf "## 内訳\n\n"
+      for (i=1; i<=c; i++) cnt[type[i]]++
+      for (k in cnt) printf "- %s: %d件\n", k, cnt[k]
+    }
+  ' "$MEM_DIR"/*.md
+}
+
 cmd_list() {
   local f
   for f in "$MEM_DIR"/*.md; do
@@ -132,6 +213,7 @@ case "${1:-}" in
   list)  cmd_list ;;
   rm)    shift; rm -f "$MEM_DIR/${1:?slug required}.md"; cmd_index ;;
   index) cmd_index ;;
+  doctor) shift; cmd_doctor "$@" ;;
   path)  echo "$MEM_DIR" ;;
   *)     usage; exit 1 ;;
 esac

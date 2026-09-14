@@ -112,6 +112,23 @@ BODY
 索引は毎セッション自動で入るので、基本は何もしなくてよい。
 本文が要るときは `/recall` を呼ぶか、KB「記憶」を意味検索する。
 
+### 記憶が増えてきたら
+
+放っておくと重複した記憶が溜まり、サマリが長くなって索引を圧迫する。
+棚卸しの材料は機械的に出せる:
+
+```bash
+~/.kiro/bin/kiro-memory doctor        # 重複候補・古い記憶・長すぎるサマリ
+~/.kiro/bin/kiro-memory doctor --stale-days 90
+```
+
+記憶が 50 件を超えると、セッション開始時に棚卸しを促すようになる
+（閾値は `KIRO_MEMORY_GC_THRESHOLD` で変更可能）。
+実際の統合・更新・短縮は `memory-gc` skill が担当する。
+
+**`memory-gc` は勝手に消さない。** 削除と統合は必ず確認を取ってから実行する。
+記憶が消えたことに気づくのは、それが必要になった瞬間だから。
+
 ### チーム共通ルールを効かせる
 
 ```bash
@@ -131,7 +148,7 @@ mv ~/.kiro/steering/10-team-rules.md.example ~/.kiro/steering/10-team-rules.md
 │   ├── 01-memory-policy.md    何を・いつ・どう記憶するかのルール
 │   └── 10-team-rules.md       チーム共通ルール（.example を外すと有効）
 ├── memory/<slug>.md           1ファイル1事実の永続メモリ
-├── skills/<name>/SKILL.md     remember / recall / start-work / save-log / morning-check
+├── skills/<name>/SKILL.md     remember / recall / memory-gc / start-work / save-log / morning-check
 ├── bin/
 │   ├── kiro-memory            記憶の追加・削除・索引生成
 │   ├── hook-session-start     agentSpawn: git状態と直近ログを注入

@@ -29,4 +29,18 @@ if [[ -n "$LOG_DIR" && -d "$LOG_DIR" ]]; then
   echo '```'
   echo "続きから始めるなら中身を read すること。"
 fi
+
+# 記憶が増えてきたら棚卸しを促す。閾値未満のときは何も言わない(毎回出すとノイズになる)
+MEM_DIR="$HOME/.kiro/memory"
+GC_THRESHOLD="${KIRO_MEMORY_GC_THRESHOLD:-50}"
+if [[ -d "$MEM_DIR" ]]; then
+  count=$(ls "$MEM_DIR"/*.md 2>/dev/null | wc -l | tr -d ' ')
+  if [[ "$count" -ge "$GC_THRESHOLD" ]]; then
+    echo
+    echo "### 記憶の棚卸しどき"
+    echo "記憶が ${count} 件あります(閾値 ${GC_THRESHOLD})。"
+    echo "手が空いているときに \`memory-gc\` skill で棚卸しを提案してください。"
+    echo "重複の統合とサマリの短縮が主な作業です。勝手に消さないこと。"
+  fi
+fi
 exit 0
