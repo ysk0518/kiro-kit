@@ -48,8 +48,39 @@ kiro-cli agent set-default kit          # または ./install.sh --set-default
 ./install.sh --no-agent --patch-agent my-agent   # hooks と記憶KBを注入（バックアップあり）
 ```
 
+このとき **`allowedTools` は変更しない**。承認の要否は各自の設定のままにする。
+毎回の承認を減らしたいなら明示的に:
+
+```bash
+./install.sh --no-agent --patch-agent my-agent --relax-tools
+```
+
+`--relax-tools` は `fs_write` と `execute_bash` を自動承認に加えるので、
+何を許すことになるか理解したうえで使うこと。
+
 既存の skill / steering / agent は**上書きしない**（`--force` で上書き）。
 何をするか見るだけなら `--dry-run`。agent 名を変えたいなら `--agent-name`。
+
+## 元に戻す
+
+```bash
+./uninstall.sh              # 何が消えるか確認してから削除
+./uninstall.sh --dry-run    # 確認だけ
+```
+
+**記憶（`~/.kiro/memory/`）と `kit.env` は消さない。** あなたが書いたデータなので、
+入れ直せばそのまま使える。完全に消すなら `--purge`。
+
+`--patch-agent` で書き換えた agent は、`~/.kiro/agents/*.bak.*` から戻せる。
+
+## 更新するとき
+
+```bash
+git pull && ./install.sh --force
+```
+
+`--force` は skills / steering / agent を上書きするが、**上書き前に `.bak.<日時>` へ退避する**ので、
+自分で書き足した内容は失われない。有効化済みの `10-team-rules.md` は対象外。
 
 ## 使いかた
 

@@ -11,6 +11,7 @@ PATCH_AGENTS=()
 AGENT_NAME="kit"
 NO_AGENT=0
 SET_DEFAULT=0
+RELAX_TOOLS=0
 
 usage() {
   cat <<'USAGE'
@@ -27,6 +28,9 @@ options:
   --set-default         作った agent を kiro-cli の既定 agent にする
   --no-agent            agent を作らない(既存の agent に入れたいときは --patch-agent を使う)
   --patch-agent NAME    既存の ~/.kiro/agents/NAME.json に hooks と記憶KBを注入する(複数可)
+                        既定では allowedTools を変更しない(承認の要否は各自の設定のまま)
+  --relax-tools         --patch-agent 時に allowedTools へ fs_write / execute_bash 等を追加する
+                        (毎回の承認を減らせるが、書き込みとシェル実行が自動承認になる)
   --force               既存の skill / steering ファイルを上書きする
   --dry-run             何をするかだけ表示する
   -h, --help            このヘルプ
@@ -43,6 +47,7 @@ while [[ $# -gt 0 ]]; do
     --work-log-dir) WORK_LOG_DIR="${2:?path required}"; shift 2 ;;
     --agent-name)   AGENT_NAME="${2:?name required}"; shift 2 ;;
     --set-default)  SET_DEFAULT=1; shift ;;
+    --relax-tools)  RELAX_TOOLS=1; shift ;;
     --no-agent)     NO_AGENT=1; shift ;;
     --patch-agent)  PATCH_AGENTS+=("${2:?name required}"); shift 2 ;;
     --force)        FORCE=1; shift ;;
@@ -54,6 +59,16 @@ done
 
 say()  { printf '  %s\n' "$*"; }
 run()  { if [[ $DRY -eq 1 ]]; then printf '  [dry] %s\n' "$*"; else eval "$@"; fi; }
+# --force で既存を上書きする前に退避する。編集していた人の内容を無言で消さないため
+backup() {
+  local f="$1"
+  [[ -f "$f" ]] || return 0
+  local b="$f.bak.$STAMP"
+  run "cp '$f' '$b'"
+  say "  退避: $(basename "$b")"
+}
+
+STAMP="$(date +%Y%m%d%H%M%S)"
 
 command -v kiro-cli >/dev/null 2>&1 || echo "warning: kiro-cli が PATH にありません(インストールは続行します)"
 
@@ -87,6 +102,7 @@ for d in "$SRC"/skills/*/; do
     say "skip (既存): skills/$name  — 上書きするなら --force"
     continue
   fi
+  backup "$target"
   run "mkdir -p '$DEST/skills/$name'"
   run "sed 's|@@WORK_LOG_DIR@@|$LOG_LABEL|g' '$d/SKILL.md' > '$target'"
   say "skills/$name"
@@ -97,6 +113,7 @@ target="$DEST/steering/01-memory-policy.md"
 if [[ -f "$target" && $FORCE -eq 0 ]]; then
   say "skip (既存): steering/01-memory-policy.md — 上書きするなら --force"
 else
+  backup "$target"
   run "cp '$SRC/steering/01-memory-policy.md' '$target'"
   say "steering/01-memory-policy.md"
 fi
@@ -117,6 +134,7 @@ target="$DEST/hooks/kiro-kit.json"
 if [[ -f "$target" && $FORCE -eq 0 ]]; then
   say "skip (既存): hooks/kiro-kit.json — 上書きするなら --force"
 else
+  backup "$target"
   run "sed 's|__HOME__|$HOME|g' '$SRC/hooks/kiro-kit.json' > '$target'"
   say "hooks/kiro-kit.json (Kiro IDE 用。CLI では無視されます)"
 fi
@@ -129,6 +147,7 @@ if [[ $NO_AGENT -eq 0 ]]; then
     say "skip (既存): agents/$AGENT_NAME.json"
     say "  既存の中身を活かして hooks だけ入れるなら: --patch-agent $AGENT_NAME"
   else
+    backup "$agent_file"
     run "sed -e 's|__HOME__|$HOME|g' -e 's|\"name\": \"kit\"|\"name\": \"$AGENT_NAME\"|' '$SRC/agents/kit.json' > '$agent_file'"
     say "agents/$AGENT_NAME.json"
   fi
@@ -157,7 +176,7 @@ if [[ ${#PATCH_AGENTS[@]} -gt 0 ]]; then
       continue
     fi
     cp "$f" "$f.bak.$(date +%Y%m%d%H%M%S)"
-    HOME_DIR="$HOME" AGENT_FILE="$f" python3 - <<'PY'
+    HOME_DIR="$HOME" AGENT_FILE="$f" RELAX_TOOLS="$RELAX_TOOLS" python3 - <<'PY'
 import json, os
 
 path = os.environ["AGENT_FILE"]
@@ -181,9 +200,12 @@ if not any(isinstance(r, dict) and r.get("name") == "記憶" for r in res):
     })
 a["resources"] = res
 
-base = ["fs_read", "fs_write", "grep", "glob", "code", "knowledge",
-        "execute_bash", "task", "introspect", "web_fetch"]
-a["allowedTools"] = list(dict.fromkeys(base + a.get("allowedTools", [])))
+# allowedTools は既定で触らない。承認の要否を勝手に変えるのは配布物の越権なので、
+# --relax-tools を明示したときだけ広げる
+if os.environ.get("RELAX_TOOLS") == "1":
+    base = ["fs_read", "fs_write", "grep", "glob", "code", "knowledge",
+            "execute_bash", "task", "introspect", "web_fetch"]
+    a["allowedTools"] = list(dict.fromkeys(base + a.get("allowedTools", [])))
 
 json.dump(a, open(path, "w"), ensure_ascii=False, indent=2)
 open(path, "a").write("\n")
