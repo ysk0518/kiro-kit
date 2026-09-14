@@ -17,7 +17,9 @@ kiro-cli には steering / skills / hooks / memory の下地が最初から入�
 ## 前提
 
 - kiro-cli 2.21 以降
-- bash / python3（macOS 標準のもので足りる）
+
+外部依存はない。bash だけで動く。
+（既存 agent に注入する `--patch-agent` を使うときだけ、JSON の編集に python3 を呼ぶ）
 
 ## 入れかた
 

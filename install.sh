@@ -128,6 +128,12 @@ fi
 
 if [[ ${#PATCH_AGENTS[@]} -gt 0 ]]; then
   echo "==> agent に hooks と記憶KBを注入"
+  # 既存 JSON をマージするのはここだけ。他の処理に python は要らない
+  if ! command -v python3 >/dev/null 2>&1; then
+    echo "  python3 が見つかりません。--patch-agent は既存 agent の JSON をマージするため python3 を使います。" >&2
+    echo "  agent を新規に作るだけなら python3 は不要です(--patch-agent を外して実行してください)。" >&2
+    exit 1
+  fi
   for name in "${PATCH_AGENTS[@]}"; do
     f="$DEST/agents/$name.json"
     if [[ ! -f "$f" ]]; then
