@@ -1,0 +1,32 @@
+#!/usr/bin/env bash
+# agentSpawn フック: セッション開始時に現在の作業状態をコンテキストへ注入する。
+#   標準出力がそのままモデルに渡る。
+set -uo pipefail
+
+# 環境依存の設定(作業ログの置き場所など)
+[[ -f "$HOME/.kiro/kit.env" ]] && . "$HOME/.kiro/kit.env"
+LOG_DIR="${KIRO_WORK_LOG_DIR:-}"
+
+echo "## セッション開始時の状態 (自動取得)"
+echo
+echo "### 作業ツリー"
+echo '```'
+if git rev-parse --is-inside-work-tree >/dev/null 2>&1; then
+  echo "branch: $(git branch --show-current 2>/dev/null)"
+  git status --short 2>/dev/null | head -20
+  echo "--- 直近のコミット ---"
+  git log --oneline -5 2>/dev/null
+else
+  echo "(gitリポジトリ外: $(pwd))"
+fi
+echo '```'
+
+if [[ -n "$LOG_DIR" && -d "$LOG_DIR" ]]; then
+  echo
+  echo "### 直近の作業ログ (${LOG_DIR})"
+  echo '```'
+  ls -t "$LOG_DIR" 2>/dev/null | head -5
+  echo '```'
+  echo "続きから始めるなら中身を read すること。"
+fi
+exit 0

@@ -1,0 +1,118 @@
+#!/usr/bin/env bash
+# kiro-memory — kiro-cli 用の永続メモリ管理
+#   1ファイル1事実を ~/.kiro/memory/ に置き、
+#   1行サマリのインデックスを ~/.kiro/steering/00-memory-index.md に自動生成する。
+#   インデックスは inclusion: always なので毎セッション自動でコンテキストに入り、
+#   本文は knowledge base 経由でセマンティック検索できる。
+set -euo pipefail
+
+MEM_DIR="${KIRO_MEMORY_DIR:-$HOME/.kiro/memory}"
+INDEX="${KIRO_MEMORY_INDEX:-$HOME/.kiro/steering/00-memory-index.md}"
+mkdir -p "$MEM_DIR" "$(dirname "$INDEX")"
+
+usage() {
+  cat <<'USAGE'
+kiro-memory <command>
+
+  add <slug> <type> <description>   標準入力から本文を読んでメモリを作成/更新
+  show <slug>                       本文を表示
+  list                              一覧（slug / type / description）
+  rm <slug>                         削除
+  index                             steering インデックスを再生成
+  path                              メモリディレクトリのパスを表示
+
+type: user | feedback | project | reference
+
+例:
+  echo '本文' | kiro-memory add stg-network project 'stgはHFdev/VPN必須'
+USAGE
+}
+
+# frontmatter から 1 フィールドを取り出す
+fm_get() {
+  awk -v key="$2" '
+    NR==1 && $0=="---" { inside=1; next }
+    inside && $0=="---" { exit }
+    inside {
+      k=$0; sub(/:.*/,"",k); gsub(/^[ \t]+|[ \t]+$/,"",k)
+      if (k==key) { v=$0; sub(/^[^:]*:[ \t]*/,"",v); gsub(/^"|"$/,"",v); print v; exit }
+    }' "$1"
+}
+
+cmd_add() {
+  local slug="${1:?slug required}" type="${2:?type required}"; shift 2
+  local desc="$*"
+  [[ -n "$desc" ]] || { echo "description required" >&2; exit 1; }
+  case "$type" in user|feedback|project|reference) ;; *) echo "invalid type: $type" >&2; exit 1;; esac
+  local body; body="$(cat)"
+  [[ -n "$body" ]] || { echo "body required on stdin" >&2; exit 1; }
+  local f="$MEM_DIR/$slug.md"
+  local created; created="$(date +%F)"
+  [[ -f "$f" ]] && created="$(fm_get "$f" created || true)"
+  [[ -n "$created" ]] || created="$(date +%F)"
+  {
+    printf -- '---\n'
+    printf 'name: %s\n' "$slug"
+    printf 'description: %s\n' "$desc"
+    printf 'type: %s\n' "$type"
+    printf 'created: %s\n' "$created"
+    printf 'updated: %s\n' "$(date +%F)"
+    printf -- '---\n\n'
+    printf '%s\n' "$body"
+  } > "$f"
+  cmd_index
+  echo "saved: $f"
+}
+
+cmd_index() {
+  local tmp; tmp="$(mktemp)"
+  {
+    printf -- '---\n'
+    printf 'inclusion: always\n'
+    printf -- '---\n\n'
+    printf '# 記憶(memory index)\n\n'
+    printf 'これは過去セッションから引き継いだ事実の索引。各行は `~/.kiro/memory/<name>.md` の要約。\n'
+    printf '詳細が要るときは knowledge ツールで検索するか、該当ファイルを read すること。\n'
+    printf '新しく覚えるべき事実が出たら `remember` skill の手順で追記する(勝手に忘れない)。\n\n'
+  } > "$tmp"
+
+  local t any=0
+  for t in project feedback user reference; do
+    local rows=""
+    local f
+    for f in "$MEM_DIR"/*.md; do
+      [[ -e "$f" ]] || continue
+      local ft; ft="$(fm_get "$f" type || true)"
+      [[ "$ft" == "$t" ]] || continue
+      local n d
+      n="$(fm_get "$f" name || basename "$f" .md)"
+      d="$(fm_get "$f" description || true)"
+      rows+="- \`$n\` — $d"$'\n'
+    done
+    if [[ -n "$rows" ]]; then
+      any=1
+      printf '## %s\n\n%s\n' "$t" "$rows" >> "$tmp"
+    fi
+  done
+  [[ $any -eq 1 ]] || printf '(まだ記憶がありません)\n' >> "$tmp"
+  mv "$tmp" "$INDEX"
+  echo "index: $INDEX"
+}
+
+cmd_list() {
+  local f
+  for f in "$MEM_DIR"/*.md; do
+    [[ -e "$f" ]] || { echo "(empty)"; return; }
+    printf '%-28s %-10s %s\n' "$(fm_get "$f" name)" "$(fm_get "$f" type)" "$(fm_get "$f" description)"
+  done
+}
+
+case "${1:-}" in
+  add)   shift; cmd_add "$@" ;;
+  show)  shift; cat "$MEM_DIR/${1:?slug required}.md" ;;
+  list)  cmd_list ;;
+  rm)    shift; rm -f "$MEM_DIR/${1:?slug required}.md"; cmd_index ;;
+  index) cmd_index ;;
+  path)  echo "$MEM_DIR" ;;
+  *)     usage; exit 1 ;;
+esac

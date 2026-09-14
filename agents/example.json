@@ -1,0 +1,38 @@
+{
+  "$schema": "https://raw.githubusercontent.com/aws/amazon-q-developer-cli/refs/heads/main/schemas/agent-v1.json",
+  "name": "example",
+  "description": "kiro-kit を組み込んだ agent の雛形。~/.kiro/agents/<name>.json として置く",
+  "prompt": "セッションをまたいで残すべき事実に気づいたら remember skill の手順で ~/.kiro/memory/ に記録してください。",
+  "tools": ["*"],
+  "allowedTools": [
+    "fs_read",
+    "fs_write",
+    "grep",
+    "glob",
+    "code",
+    "knowledge",
+    "execute_bash",
+    "task",
+    "introspect",
+    "web_fetch"
+  ],
+  "hooks": {
+    "agentSpawn": [
+      { "command": "__HOME__/.kiro/bin/hook-session-start", "timeout_ms": 10000 }
+    ],
+    "userPromptSubmit": [
+      { "command": "__HOME__/.kiro/bin/hook-remember-nudge", "timeout_ms": 5000 }
+    ]
+  },
+  "resources": [
+    {
+      "type": "knowledgeBase",
+      "source": "file://__HOME__/.kiro/memory",
+      "name": "記憶",
+      "indexType": "best",
+      "include": ["**/*.md"],
+      "autoUpdate": true
+    }
+  ],
+  "welcomeMessage": "記憶を引き継いで作業します。"
+}

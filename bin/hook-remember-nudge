@@ -1,0 +1,27 @@
+#!/usr/bin/env bash
+# userPromptSubmit フック: 記憶に関わる依頼を検知して remember の手順を差し込む。
+#   kiro-cli が渡すもの:
+#     stdin: {"hook_event_name":"userPromptSubmit","cwd":"...","prompt":"..."}
+#     env  : USER_PROMPT, KIRO_SESSION_ID
+set -uo pipefail
+
+prompt="${USER_PROMPT:-}"
+if [[ -z "$prompt" ]]; then
+  # 環境変数が無い場合は stdin の JSON から取る
+  prompt="$(cat 2>/dev/null | sed -n 's/.*"prompt"[[:space:]]*:[[:space:]]*"\(.*\)".*/\1/p')"
+fi
+
+case "$prompt" in
+  *覚え*|*記憶*|*おぼえ*|*忘れ*|*memory*|*remember*)
+    echo "## 記憶の依頼を検知"
+    echo
+    echo "\`remember\` skill の手順に従って \`~/.kiro/bin/kiro-memory add\` で永続化すること。"
+    echo "既存の記憶と重複しないか、まず下の一覧で確認し、近いものがあれば新規作成せず更新する。"
+    echo
+    echo "現在の記憶:"
+    echo '```'
+    ~/.kiro/bin/kiro-memory list 2>/dev/null | head -30
+    echo '```'
+    ;;
+esac
+exit 0
