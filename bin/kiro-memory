@@ -76,25 +76,44 @@ cmd_index() {
     printf '新しく覚えるべき事実が出たら `remember` skill の手順で追記する(勝手に忘れない)。\n\n'
   } > "$tmp"
 
-  local t any=0
-  for t in project feedback user reference; do
-    local rows=""
-    local f
-    for f in "$MEM_DIR"/*.md; do
-      [[ -e "$f" ]] || continue
-      local ft; ft="$(fm_get "$f" type || true)"
-      [[ "$ft" == "$t" ]] || continue
-      local n d
-      n="$(fm_get "$f" name || basename "$f" .md)"
-      d="$(fm_get "$f" description || true)"
-      rows+="- \`$n\` — $d"$'\n'
-    done
-    if [[ -n "$rows" ]]; then
-      any=1
-      printf '## %s\n\n%s\n' "$t" "$rows" >> "$tmp"
-    fi
-  done
-  [[ $any -eq 1 ]] || printf '(まだ記憶がありません)\n' >> "$tmp"
+  # 全ファイルの frontmatter を awk 1回で読む。
+  # ファイル数ぶんプロセスを起動すると数百件で数秒かかるため、まとめて処理する
+  local body=""
+  if compgen -G "$MEM_DIR/*.md" >/dev/null; then
+    body="$(awk '
+      FNR==1 { fm=0; n=""; d=""; t=""; done=0
+               slug=FILENAME; sub(/.*\//,"",slug); sub(/\.md$/,"",slug) }
+      done { next }
+      FNR==1 && $0=="---" { fm=1; next }
+      fm && $0=="---" {
+        fm=0; done=1
+        if (n=="") n=slug
+        if (t=="") t="project"
+        rows[t] = rows[t] "- `" n "` — " d "\n"
+        next
+      }
+      fm {
+        if (match($0, /^name:[ \t]*/))             n=substr($0, RLENGTH+1)
+        else if (match($0, /^description:[ \t]*/)) d=substr($0, RLENGTH+1)
+        else if (match($0, /^type:[ \t]*/))        t=substr($0, RLENGTH+1)
+      }
+      END {
+        split("project feedback user reference", order, " ")
+        for (i=1; i<=4; i++) {
+          k=order[i]
+          if (k in rows) printf "## %s\n\n%s\n", k, rows[k]
+          delete rows[k]
+        }
+        for (k in rows) printf "## %s\n\n%s\n", k, rows[k]   # 想定外の type も落とさない
+      }
+    ' "$MEM_DIR"/*.md)"
+  fi
+
+  if [[ -n "$body" ]]; then
+    printf '%s\n' "$body" >> "$tmp"
+  else
+    printf '(まだ記憶がありません)\n' >> "$tmp"
+  fi
   mv "$tmp" "$INDEX"
   echo "index: $INDEX"
 }
