@@ -105,7 +105,8 @@ mv ~/.kiro/steering/10-team-rules.md.example ~/.kiro/steering/10-team-rules.md
 │   ├── kiro-memory            記憶の追加・削除・索引生成
 │   ├── hook-session-start     agentSpawn: git状態と直近ログを注入
 │   └── hook-remember-nudge    userPromptSubmit: 記憶の依頼を検知して手順を注入
-├── agents/kit.json            hooks と記憶KBを有効にした agent
+├── agents/kit.json            hooks と記憶KBを有効にした agent（CLI 用）
+├── hooks/kiro-kit.json        同じ hooks の Kiro IDE 用（CLI では無視される）
 └── kit.env                    環境依存の設定（作業ログの場所など）
 ```
 
@@ -148,6 +149,32 @@ kiro-cli の実装を調べて分かったことで、公式ドキュメント�
   `USER_PROMPT` は**環境変数**であって stdin の JSON キーではない（キーは `prompt`）。
   取り違えるとフックは「成功」扱いのまま何も出力しないので気づきにくい。
   標準出力がそのままモデルに渡り、exit 0 が正常。
+
+## Kiro IDE で使う
+
+`~/.kiro/` 配下はグローバル設定として **IDE も読む**ので、install.sh を実行した環境で
+Kiro IDE を開けば記憶もルールも skills もそのまま引き継がれる。CLI と IDE で同じ記憶を共有できる。
+
+| | CLI | IDE |
+|---|---|---|
+| steering（記憶索引・ルール） | 効く | 効く |
+| skills | 効く | 効く |
+| agents | 効く | 効く |
+| memory | 効く（`kiro-memory` はターミナルから） | 効く |
+| hooks | `agents/kit.json` 内に定義 | `hooks/kiro-kit.json` を配置 |
+
+hooks だけ形式が違うため、install.sh は両方を置く。CLI は独立した hooks ファイルを
+読まないので、二重に発火することはない（実測で確認済み）。
+
+**IDE 側の hooks は未検証。** ドキュメントの仕様どおりに書いてあるが、
+手元に Kiro IDE がないため動作確認できていない。特に `PromptSubmit` が渡す
+JSON のキー名が不明なので、`hook-remember-nudge` は入力全体から検知語を探す
+フォールバックを持たせてある。動かない場合は
+`~/.kiro/hooks/kiro-kit.json` の `trigger` 名を実際のものに直せばよい。
+
+IDE では steering の `inclusion` が `always` 以外も機能する
+（CLI は公式に非対応）。`fileMatch` と `fileMatchPattern` を使えば
+「Go を触るときだけこのルール」といった出し分けができる。
 
 ## 期待値について
 

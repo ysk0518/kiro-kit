@@ -1,0 +1,21 @@
+{
+  "version": "v1",
+  "hooks": [
+    {
+      "name": "kiro-kit: セッション開始時の状態注入",
+      "trigger": "SessionStart",
+      "action": {
+        "type": "command",
+        "command": "__HOME__/.kiro/bin/hook-session-start"
+      }
+    },
+    {
+      "name": "kiro-kit: 記憶の依頼を検知",
+      "trigger": "PromptSubmit",
+      "action": {
+        "type": "command",
+        "command": "__HOME__/.kiro/bin/hook-remember-nudge"
+      }
+    }
+  ]
+}

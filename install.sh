@@ -109,6 +109,18 @@ echo "==> 記憶の索引を生成"
 run "'$DEST/bin/kiro-memory' index >/dev/null"
 say "steering/00-memory-index.md"
 
+echo "==> IDE 用 hooks を配置"
+# Kiro IDE は ~/.kiro/hooks/*.json を読む。kiro-cli 2.21 はこの形式を読まないので
+# CLI 側は agent 設定の hooks が使われる(二重には発火しない)
+run "mkdir -p '$DEST/hooks'"
+target="$DEST/hooks/kiro-kit.json"
+if [[ -f "$target" && $FORCE -eq 0 ]]; then
+  say "skip (既存): hooks/kiro-kit.json — 上書きするなら --force"
+else
+  run "sed 's|__HOME__|$HOME|g' '$SRC/hooks/kiro-kit.json' > '$target'"
+  say "hooks/kiro-kit.json (Kiro IDE 用。CLI では無視されます)"
+fi
+
 if [[ $NO_AGENT -eq 0 ]]; then
   echo "==> agent を作成"
   say "hooks は agent 設定にしか書けないので、これがないと起動時の状態注入が効きません"
