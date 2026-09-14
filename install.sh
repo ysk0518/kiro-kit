@@ -8,6 +8,9 @@ FORCE=0
 DRY=0
 WORK_LOG_DIR=""
 PATCH_AGENTS=()
+AGENT_NAME="kit"
+NO_AGENT=0
+SET_DEFAULT=0
 
 usage() {
   cat <<'USAGE'
@@ -15,22 +18,32 @@ kiro-kit installer
 
   ./install.sh [options]
 
+既定で ~/.kiro/agents/kit.json という agent を作る。hooks は agent 設定にしか
+書けないため、これがないと起動時の状態注入と記憶依頼の検知が有効にならない。
+
 options:
   --work-log-dir DIR    作業ログの置き場所(省略可。指定するとセッション開始時に直近5件が出る)
+  --agent-name NAME     作る agent の名前(既定: kit)
+  --set-default         作った agent を kiro-cli の既定 agent にする
+  --no-agent            agent を作らない(既存の agent に入れたいときは --patch-agent を使う)
   --patch-agent NAME    既存の ~/.kiro/agents/NAME.json に hooks と記憶KBを注入する(複数可)
   --force               既存の skill / steering ファイルを上書きする
   --dry-run             何をするかだけ表示する
   -h, --help            このヘルプ
 
 例:
-  ./install.sh
-  ./install.sh --work-log-dir ~/workspace/work_logs --patch-agent my-agent
+  ./install.sh                                   # 全部入り。kit agent を作る
+  ./install.sh --set-default                     # さらに既定 agent にする
+  ./install.sh --no-agent --patch-agent my-agent # 既存の agent に組み込む
 USAGE
 }
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --work-log-dir) WORK_LOG_DIR="${2:?path required}"; shift 2 ;;
+    --agent-name)   AGENT_NAME="${2:?name required}"; shift 2 ;;
+    --set-default)  SET_DEFAULT=1; shift ;;
+    --no-agent)     NO_AGENT=1; shift ;;
     --patch-agent)  PATCH_AGENTS+=("${2:?name required}"); shift 2 ;;
     --force)        FORCE=1; shift ;;
     --dry-run)      DRY=1; shift ;;
@@ -96,6 +109,23 @@ echo "==> 記憶の索引を生成"
 run "'$DEST/bin/kiro-memory' index >/dev/null"
 say "steering/00-memory-index.md"
 
+if [[ $NO_AGENT -eq 0 ]]; then
+  echo "==> agent を作成"
+  say "hooks は agent 設定にしか書けないので、これがないと起動時の状態注入が効きません"
+  agent_file="$DEST/agents/$AGENT_NAME.json"
+  if [[ -f "$agent_file" && $FORCE -eq 0 ]]; then
+    say "skip (既存): agents/$AGENT_NAME.json"
+    say "  既存の中身を活かして hooks だけ入れるなら: --patch-agent $AGENT_NAME"
+  else
+    run "sed -e 's|__HOME__|$HOME|g' -e 's|\"name\": \"kit\"|\"name\": \"$AGENT_NAME\"|' '$SRC/agents/kit.json' > '$agent_file'"
+    say "agents/$AGENT_NAME.json"
+  fi
+  if [[ $SET_DEFAULT -eq 1 ]]; then
+    run "kiro-cli agent set-default '$AGENT_NAME'"
+    say "既定 agent を $AGENT_NAME にしました"
+  fi
+fi
+
 if [[ ${#PATCH_AGENTS[@]} -gt 0 ]]; then
   echo "==> agent に hooks と記憶KBを注入"
   for name in "${PATCH_AGENTS[@]}"; do
@@ -142,18 +172,23 @@ open(path, "a").write("\n")
 print(f"  patched: {os.path.basename(path)} (バックアップあり)")
 PY
   done
-else
-  echo "==> agent への hooks 注入 (未実施)"
-  say "hooks は agent 設定にしか書けません。既存の agent に入れるには:"
-  say "  ./install.sh --patch-agent <agent名>"
-  say "新しく作るなら agents/example.json を雛形にしてください。"
 fi
 
+echo
+echo "==> 完了"
+cat <<DONE
+
+使いはじめる:
+  kiro-cli chat --agent $AGENT_NAME
+DONE
+if [[ $NO_AGENT -eq 0 && $SET_DEFAULT -eq 0 ]]; then
+  cat <<DONE
+  毎回 --agent を打ちたくなければ: kiro-cli agent set-default $AGENT_NAME
+DONE
+fi
 cat <<'DONE'
 
-==> 完了
-
-確認:
+動いているか確認する:
   kiro-cli chat --no-interactive "利用可能な skill を列挙して"
 
 記憶を1件書いてみる:

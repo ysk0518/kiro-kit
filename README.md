@@ -24,6 +24,14 @@ kiro-cli には steering / skills / hooks / memory の下地が最初から入�
 ```bash
 git clone <このリポジトリ> && cd kiro-kit
 ./install.sh
+kiro-cli chat --agent kit
+```
+
+これで全部入る。`kit` という agent が作られるのは、**hooks が agent 設定にしか
+書けない**ため（グローバルな置き場所がない）。毎回 `--agent` を打ちたくなければ:
+
+```bash
+kiro-cli agent set-default kit          # または ./install.sh --set-default
 ```
 
 作業ログを使っているなら、その場所を教えると起動時に直近5件が自動で入る:
@@ -32,14 +40,14 @@ git clone <このリポジトリ> && cd kiro-kit
 ./install.sh --work-log-dir ~/workspace/work_logs
 ```
 
-既存の agent に hooks を組み込む（後述の理由で agent 設定にしか書けない）:
+**既に自分の agent を持っている場合**は、新しく作らずそこに組み込める:
 
 ```bash
-./install.sh --patch-agent my-agent     # ~/.kiro/agents/my-agent.json を書き換え（バックアップあり）
+./install.sh --no-agent --patch-agent my-agent   # hooks と記憶KBを注入（バックアップあり）
 ```
 
-既存の skill / steering は**上書きしない**（`--force` で上書き）。
-何をするか見るだけなら `--dry-run`。
+既存の skill / steering / agent は**上書きしない**（`--force` で上書き）。
+何をするか見るだけなら `--dry-run`。agent 名を変えたいなら `--agent-name`。
 
 ## 使いかた
 
@@ -95,6 +103,7 @@ mv ~/.kiro/steering/10-team-rules.md.example ~/.kiro/steering/10-team-rules.md
 │   ├── kiro-memory            記憶の追加・削除・索引生成
 │   ├── hook-session-start     agentSpawn: git状態と直近ログを注入
 │   └── hook-remember-nudge    userPromptSubmit: 記憶の依頼を検知して手順を注入
+├── agents/kit.json            hooks と記憶KBを有効にした agent
 └── kit.env                    環境依存の設定（作業ログの場所など）
 ```
 
@@ -111,7 +120,7 @@ kiro-cli の実装を調べて分かったことで、公式ドキュメント�
 
 - **hooks は agent 設定 (`~/.kiro/agents/<name>.json`) にしか書けない。**
   グローバルな置き場所がないので、agent ごとに入れる必要がある
-  (`install.sh --patch-agent` がやるのはこれ)。
+  (install.sh が `kit` agent を作るのも、`--patch-agent` があるのもこのため)。
   トリガーは `agentSpawn` / `userPromptSubmit` / `preToolUse` / `postToolUse` / `stop` の5種。
 
 - **フックが受け取る入力の形（実測）:**

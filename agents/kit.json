@@ -1,7 +1,7 @@
 {
   "$schema": "https://raw.githubusercontent.com/aws/amazon-q-developer-cli/refs/heads/main/schemas/agent-v1.json",
-  "name": "example",
-  "description": "kiro-kit を組み込んだ agent の雛形。~/.kiro/agents/<name>.json として置く",
+  "name": "kit",
+  "description": "kiro-kit の記憶と hooks を有効にした agent",
   "prompt": "セッションをまたいで残すべき事実に気づいたら remember skill の手順で ~/.kiro/memory/ に記録してください。",
   "tools": ["*"],
   "allowedTools": [
