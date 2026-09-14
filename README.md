@@ -123,6 +123,21 @@ kiro-cli の実装を調べて分かったことで、公式ドキュメント�
   (install.sh が `kit` agent を作るのも、`--patch-agent` があるのもこのため)。
   トリガーは `agentSpawn` / `userPromptSubmit` / `preToolUse` / `postToolUse` / `stop` の5種。
 
+- **組み込みの `kiro_default` では hooks が効かない。**
+  設定ファイルを持たない agent なので、hooks の書きようがない。
+  `--agent` を付けずに起動すると、こうなる（実測）:
+
+  | | `kiro_default` | 自前の agent |
+  |---|---|---|
+  | steering（記憶索引・ルール） | 効く | 効く |
+  | skills | 効く | 効く |
+  | hooks（起動時の状態注入・記憶依頼の検知） | **効かない** | 効く |
+  | KB「記憶」の意味検索 | **使えない** | 使える |
+
+  記憶とルールはグローバルに読まれるので `kiro_default` でも半分は動く。
+  取りこぼすのは hooks と KB 検索だけなので、実害を感じないなら既定のままでも困らない。
+  全部有効にするなら `kiro-cli agent set-default kit`。
+
 - **フックが受け取る入力の形（実測）:**
   ```
   stdin: {"hook_event_name":"userPromptSubmit","cwd":"...","prompt":"..."}
