@@ -1,8 +1,14 @@
 # kiro-kit
 
-kiro-cli に「セッションをまたいで覚えている」「毎回同じ指示をしなくて済む」レイヤーを足すキット。
+> セッションをまたいで覚えている kiro-cli。
 
-## これを入れると変わること
+![kiro-cli 2.21+](https://img.shields.io/badge/kiro--cli-2.21%2B-1d6f62?style=flat-square)
+![dependencies none](https://img.shields.io/badge/dependencies-none-555?style=flat-square)
+![license MIT](https://img.shields.io/badge/license-MIT-555?style=flat-square)
+
+永続メモリ・常時効くルール・起動時の状態注入を、bash だけで足すキット。
+
+## What changes — これを入れると変わること
 
 | 前 | 後 |
 |---|---|
@@ -11,14 +17,14 @@ kiro-cli に「セッションをまたいで覚えている」「毎回同じ�
 | 環境の落とし穴を毎回踏み直す | 一度記録すれば次回のセッションが最初から知っている |
 | 手順を毎回プロンプトで書く | skill として呼べる |
 
-## 前提
+## Requirements — 前提
 
 - kiro-cli 2.21 以降
 
 外部依存はない。bash だけで動く。
 （既存 agent に注入する `--patch-agent` を使うときだけ、JSON の編集に python3 を呼ぶ）
 
-## 入れかた
+## Install — 入れかた
 
 ```bash
 git clone https://github.com/ysk0518/kiro-kit && cd kiro-kit
@@ -52,9 +58,9 @@ kiro-cli agent set-default kit          # または ./install.sh --set-default
 既存の skill / steering / agent は**上書きしない**（`--force` で上書き）。
 何をするか見るだけなら `--dry-run`。agent 名を変えたいなら `--agent-name`。
 
-## 使いかた
+## Usage — 使いかた
 
-### 記憶する
+### Remember / 記憶する
 
 ```bash
 cat <<'BODY' | ~/.kiro/bin/kiro-memory add test-parallel-fail project 'ローカルでだけ落ちるテストは、まず並列実行を疑う'
@@ -77,7 +83,7 @@ BODY
 ~/.kiro/bin/kiro-memory rm <slug>   # 削除（索引も自動更新）
 ```
 
-### 思い出す
+### Recall / 思い出す
 
 索引は毎セッション自動で入るので、基本は何もしなくてよい。
 索引で見つからないときは `/recall` が段階的に探す:
@@ -91,7 +97,7 @@ KB を最後にしているのは、**意味検索が万能ではない**ため�
 主題から外れた内容は引けなかった。grep は言い換えに弱い代わりに取りこぼさないので、
 言葉が分かっているうちは grep の方が確実。
 
-### チーム共通ルールを効かせる
+### Team rules / チーム共通ルール
 
 ```bash
 mv ~/.kiro/steering/10-team-rules.md.example ~/.kiro/steering/10-team-rules.md
@@ -101,11 +107,11 @@ mv ~/.kiro/steering/10-team-rules.md.example ~/.kiro/steering/10-team-rules.md
 **毎回言っているのに毎回守られないこと**だけを書く。たまにしか要らないことを書くと
 コンテキストを食うだけなので書かない。
 
-## 記憶が増えてきたら
+## Housekeeping — 記憶が増えてきたら
 
 放っておくと重複した記憶が溜まり、サマリが長くなって索引を圧迫する。
 
-### 棚卸しする
+### Triage / 棚卸しする
 
 材料は機械的に出せる:
 
@@ -128,7 +134,7 @@ doctor が出すのは**候補であって判断ではない**。重複候補に
 > 判断して統合せず、短縮候補も大半を「検索の手がかりが残っているので現状維持が妥当」と
 > 却下したうえで、1件だけ提案して承認待ちで停止した。記憶は1バイトも変更されなかった。
 
-### 索引に上限をかける
+### Index limit / 索引に上限をかける
 
 ```bash
 export KIRO_MEMORY_INDEX_MAX=40    # project/reference は新しい順に40件まで（既定は無制限）
@@ -143,7 +149,7 @@ export KIRO_MEMORY_INDEX_MAX=40    # project/reference は新しい順に40件�
 古い記憶ほど落ちる方式なので、**長く変わらない重要な事実**（環境の落とし穴など）が
 省略されることがある。それでも grep で確実に引けるようにフル索引を用意している。
 
-## 更新とアンインストール
+## Update & Uninstall — 更新と削除
 
 ```bash
 git pull && ./install.sh --force    # 更新
@@ -158,7 +164,7 @@ git pull && ./install.sh --force    # 更新
 入れ直せばそのまま使える。完全に消すなら `--purge`。
 `--patch-agent` で書き換えた agent は `~/.kiro/agents/*.bak.*` から戻せる。
 
-## 何がどこに置かれるか
+## Layout — 何がどこに置かれるか
 
 ```
 ~/.kiro/
@@ -177,7 +183,7 @@ git pull && ./install.sh --force    # 更新
 └── kit.env                    環境依存の設定（作業ログの場所など）
 ```
 
-## なぜ作ったか — 純正には「記憶」が無い
+## Why — 純正には「記憶」が無い
 
 kiro-cli の純正機能は steering / skills / hooks の3つで、既定では**全部空**。
 **永続メモリは実装されていない**（[Feature Request #6988](https://github.com/kirodotdev/Kiro/issues/6988)
@@ -198,7 +204,7 @@ Claude Code を使っているなら、**あの `/memory` を kiro-cli に移植
 `~/.claude/projects/<project>/memory/` と `MEMORY.md` が、
 `~/.kiro/memory/` と `steering/00-memory-index.md` に対応する。
 
-## kiro-cli の仕様で分かったこと
+## Internals — kiro-cli の仕様で分かったこと
 
 公式ドキュメントに書かれていない、実測で確かめた点:
 
@@ -242,7 +248,7 @@ Claude Code を使っているなら、**あの `/memory` を kiro-cli に移植
   macOS の awk（20200816）は UTF-8 非対応で、日本語が約1.6倍に膨らむ（76文字が120と出る）。
   ロケールを変えても直らない。文字数を数えるならシェルの `${#var}` を使う。
 
-## 安全側の作り
+## Hardening — 安全側の作り
 
 配布物として他人の環境で動くので、外から来た値がパスや設定に流れ込む箇所は検証している。
 
@@ -259,7 +265,7 @@ Claude Code を使っているなら、**あの `/memory` を kiro-cli に移植
 - **`memory-gc` は記憶を勝手に消さない。** 削除と統合は承認を取ってから。
 - **`uninstall.sh` は記憶と `kit.env` を残す。** 全部消すなら `--purge`。
 
-## Kiro IDE で使う
+## Kiro IDE
 
 `~/.kiro/` 配下はグローバル設定として **IDE も読む**ので、install.sh を実行した環境で
 Kiro IDE を開けば記憶もルールも skills もそのまま引き継がれる。CLI と IDE で同じ記憶を共有できる。
@@ -281,7 +287,7 @@ JSON のキー名が不明なので、`hook-remember-nudge` は入力全体か�
 フォールバックを持たせてある。動かない場合は
 `~/.kiro/hooks/kiro-kit.json` の `trigger` 名を実際のものに直せばよい。
 
-### steering の inclusion は always のままにする
+### Inclusion / always のままにする
 
 IDE は `inclusion` の全モード（`always` / `fileMatch` / `manual` / `auto`）に対応しているが、
 **CLI は `always` しか読まない。それ以外は条件つきで入るのではなく、丸ごと除外される。**
@@ -296,7 +302,7 @@ IDE は `inclusion` の全モード（`always` / `fileMatch` / `manual` / `auto`
 出し分けたいなら、IDE 専用と割り切った別ファイルとして各自のワークスペース
 （`.kiro/steering/`）に置く。
 
-## 期待値と、含めていないもの
+## Scope — 期待値と、含めていないもの
 
 steering と hooks は確実に効く。一方 **memory は書かないと貯まらない**。
 フックと steering で書くよう仕向けてはいるが、モデルが「これは記憶すべきだ」と
