@@ -3,9 +3,19 @@
 #   標準出力がそのままモデルに渡る。
 set -uo pipefail
 
-# 環境依存の設定(作業ログの置き場所など)
-[[ -f "$HOME/.kiro/kit.env" ]] && . "$HOME/.kiro/kit.env"
-LOG_DIR="${KIRO_WORK_LOG_DIR:-}"
+# 環境依存の設定(作業ログの置き場所など)。
+# source すると設定ファイルの中身がそのまま実行されてしまうので、
+# 必要なキーだけを読み取って値として扱う
+read_kit_env() {
+  local key="$1" file="$HOME/.kiro/kit.env" line
+  [[ -f "$file" ]] || return 0
+  line="$(grep -m1 "^[[:space:]]*${key}=" "$file" 2>/dev/null)" || return 0
+  line="${line#*=}"
+  line="${line%\"}"; line="${line#\"}"
+  line="${line%\'}"; line="${line#\'}"
+  printf '%s' "$line"
+}
+LOG_DIR="$(read_kit_env KIRO_WORK_LOG_DIR)"
 
 echo "## セッション開始時の状態 (自動取得)"
 echo

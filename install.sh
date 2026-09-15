@@ -66,6 +66,15 @@ if [[ ! "$AGENT_NAME" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
   echo "invalid --agent-name (英数字・ハイフン・アンダースコア・ドットのみ): '$AGENT_NAME'" >&2; exit 1
 fi
 
+# kit.env に書いた値は設定ファイルとして読まれる。shell のメタ文字が混ざると
+# 読み手の実装次第で任意コマンドが走りうるので、書き込む前に弾く
+if [[ -n "$WORK_LOG_DIR" ]]; then
+  if [[ "$WORK_LOG_DIR" == *[\'\"\`\$\;\&\|\<\>\(\)]* || "$WORK_LOG_DIR" == *$'\n'* ]]; then
+    echo "invalid --work-log-dir (使えない文字が含まれています): $WORK_LOG_DIR" >&2
+    exit 1
+  fi
+fi
+
 # --patch-agent も同じ経路でファイル名になる
 for _n in ${PATCH_AGENTS+"${PATCH_AGENTS[@]}"}; do
   case "$_n" in
@@ -74,13 +83,25 @@ for _n in ${PATCH_AGENTS+"${PATCH_AGENTS[@]}"}; do
 done
 
 say()  { printf '  %s\n' "$*"; }
-run()  { if [[ $DRY -eq 1 ]]; then printf '  [dry] %s\n' "$*"; else eval "$@"; fi; }
+
+# コマンドは配列で受けてそのまま実行する。eval を通さないので、
+# 引数に空白や記号が入ってもシェルに解釈されない
+run() {
+  if [[ $DRY -eq 1 ]]; then printf '  [dry] %s\n' "$*"; else "$@"; fi
+}
+
+# 出力をファイルへリダイレクトする版。リダイレクトのためだけに
+# eval を使う必要がないようにしている
+run_to() {
+  local out="$1"; shift
+  if [[ $DRY -eq 1 ]]; then printf '  [dry] %s > %s\n' "$*" "$out"; else "$@" > "$out"; fi
+}
 # --force で既存を上書きする前に退避する。編集していた人の内容を無言で消さないため
 backup() {
   local f="$1"
   [[ -f "$f" ]] || return 0
   local b="$f.bak.$STAMP"
-  run "cp '$f' '$b'"
+  run cp "$f" "$b"
   say "  退避: $(basename "$b")"
 }
 
@@ -90,13 +111,13 @@ command -v kiro-cli >/dev/null 2>&1 || echo "warning: kiro-cli が PATH にあ�
 
 echo "==> ディレクトリを作成"
 for d in bin memory skills steering agents; do
-  run "mkdir -p '$DEST/$d'"
+  run mkdir -p "$DEST/$d"
   say "$DEST/$d"
 done
 
 echo "==> スクリプトを配置"
 for f in kiro-memory hook-session-start hook-remember-nudge; do
-  run "install -m 0755 '$SRC/bin/$f' '$DEST/bin/$f'"
+  run install -m 0755 "$SRC/bin/$f" "$DEST/bin/$f"
   say "bin/$f"
 done
 
@@ -104,7 +125,7 @@ echo "==> 設定ファイル"
 if [[ -f "$DEST/kit.env" ]]; then
   say "kit.env は既にあるので触りません"
 else
-  run "sed 's|^KIRO_WORK_LOG_DIR=.*|KIRO_WORK_LOG_DIR=\"$WORK_LOG_DIR\"|' '$SRC/kit.env.example' > '$DEST/kit.env'"
+  run_to "$DEST/kit.env" sed "s|^KIRO_WORK_LOG_DIR=.*|KIRO_WORK_LOG_DIR=\"$WORK_LOG_DIR\"|" "$SRC/kit.env.example"
   say "kit.env を作成 (KIRO_WORK_LOG_DIR=\"$WORK_LOG_DIR\")"
 fi
 
@@ -119,8 +140,8 @@ for d in "$SRC"/skills/*/; do
     continue
   fi
   backup "$target"
-  run "mkdir -p '$DEST/skills/$name'"
-  run "sed 's|@@WORK_LOG_DIR@@|$LOG_LABEL|g' '$d/SKILL.md' > '$target'"
+  run mkdir -p "$DEST/skills/$name"
+  run_to "$target" sed "s|@@WORK_LOG_DIR@@|$LOG_LABEL|g" "$d/SKILL.md"
   say "skills/$name"
 done
 
@@ -130,28 +151,28 @@ if [[ -f "$target" && $FORCE -eq 0 ]]; then
   say "skip (既存): steering/01-memory-policy.md — 上書きするなら --force"
 else
   backup "$target"
-  run "cp '$SRC/steering/01-memory-policy.md' '$target'"
+  run cp "$SRC/steering/01-memory-policy.md" "$target"
   say "steering/01-memory-policy.md"
 fi
 if [[ ! -f "$DEST/steering/10-team-rules.md" ]]; then
-  run "cp '$SRC/steering/10-team-rules.md.example' '$DEST/steering/10-team-rules.md.example'"
+  run cp "$SRC/steering/10-team-rules.md.example" "$DEST/steering/10-team-rules.md.example"
   say "steering/10-team-rules.md.example (.example を外すと有効になります)"
 fi
 
 echo "==> 記憶の索引を生成"
-run "'$DEST/bin/kiro-memory' index >/dev/null"
+run_to /dev/null "$DEST/bin/kiro-memory" index
 say "steering/00-memory-index.md"
 
 echo "==> IDE 用 hooks を配置"
 # Kiro IDE は ~/.kiro/hooks/*.json を読む。kiro-cli 2.21 はこの形式を読まないので
 # CLI 側は agent 設定の hooks が使われる(二重には発火しない)
-run "mkdir -p '$DEST/hooks'"
+run mkdir -p "$DEST/hooks"
 target="$DEST/hooks/kiro-kit.json"
 if [[ -f "$target" && $FORCE -eq 0 ]]; then
   say "skip (既存): hooks/kiro-kit.json — 上書きするなら --force"
 else
   backup "$target"
-  run "sed 's|__HOME__|$HOME|g' '$SRC/hooks/kiro-kit.json' > '$target'"
+  run_to "$target" sed "s|__HOME__|$HOME|g" "$SRC/hooks/kiro-kit.json"
   say "hooks/kiro-kit.json (Kiro IDE 用。CLI では無視されます)"
 fi
 
@@ -164,11 +185,11 @@ if [[ $NO_AGENT -eq 0 ]]; then
     say "  既存の中身を活かして hooks だけ入れるなら: --patch-agent $AGENT_NAME"
   else
     backup "$agent_file"
-    run "sed -e 's|__HOME__|$HOME|g' -e 's|\"name\": \"kit\"|\"name\": \"$AGENT_NAME\"|' '$SRC/agents/kit.json' > '$agent_file'"
+    run_to "$agent_file" sed -e "s|__HOME__|$HOME|g" -e "s|\"name\": \"kit\"|\"name\": \"$AGENT_NAME\"|" "$SRC/agents/kit.json"
     say "agents/$AGENT_NAME.json"
   fi
   if [[ $SET_DEFAULT -eq 1 ]]; then
-    run "kiro-cli agent set-default '$AGENT_NAME'"
+    run kiro-cli agent set-default "$AGENT_NAME"
     say "既定 agent を $AGENT_NAME にしました"
   fi
 fi
