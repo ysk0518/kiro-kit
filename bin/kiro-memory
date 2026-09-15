@@ -35,6 +35,20 @@ type: user | feedback | project | reference
 USAGE
 }
 
+# slug を検証する。パス区切りや .. を弾いて MEM_DIR の外に出られないようにする。
+# 記憶はモデルが自動で書くので、本文から流れ込んだ文字列がそのまま slug になりうる
+check_slug() {
+  local slug="$1"
+  case "$slug" in
+    ""|.|..)        echo "invalid slug: '$slug'" >&2; exit 1 ;;
+    */*|*\\*)       echo "invalid slug (パス区切りは使えません): '$slug'" >&2; exit 1 ;;
+    -*)             echo "invalid slug (先頭のハイフンは使えません): '$slug'" >&2; exit 1 ;;
+  esac
+  if [[ ! "$slug" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
+    echo "invalid slug (英数字・ハイフン・アンダースコア・ドットのみ): '$slug'" >&2; exit 1
+  fi
+}
+
 # frontmatter から 1 フィールドを取り出す
 fm_get() {
   awk -v key="$2" '
@@ -48,6 +62,7 @@ fm_get() {
 
 cmd_add() {
   local slug="${1:?slug required}" type="${2:?type required}"; shift 2
+  check_slug "$slug"
   local desc="$*"
   [[ -n "$desc" ]] || { echo "description required" >&2; exit 1; }
   case "$type" in user|feedback|project|reference) ;; *) echo "invalid type: $type" >&2; exit 1;; esac
@@ -257,9 +272,9 @@ cmd_list() {
 
 case "${1:-}" in
   add)   shift; cmd_add "$@" ;;
-  show)  shift; cat "$MEM_DIR/${1:?slug required}.md" ;;
+  show)  shift; check_slug "${1:?slug required}"; cat "$MEM_DIR/$1.md" ;;
   list)  cmd_list ;;
-  rm)    shift; rm -f "$MEM_DIR/${1:?slug required}.md"; cmd_index ;;
+  rm)    shift; check_slug "${1:?slug required}"; rm -f "$MEM_DIR/$1.md"; cmd_index ;;
   index) cmd_index ;;
   doctor) shift; cmd_doctor "$@" ;;
   path)  echo "$MEM_DIR" ;;

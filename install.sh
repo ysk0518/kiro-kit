@@ -57,6 +57,22 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
+# agent 名は ~/.kiro/agents/<name>.json になるため、パス区切りを弾く
+case "$AGENT_NAME" in
+  ""|.|..|*/*|*\\*|-*)
+    echo "invalid --agent-name: '$AGENT_NAME'" >&2; exit 1 ;;
+esac
+if [[ ! "$AGENT_NAME" =~ ^[A-Za-z0-9][A-Za-z0-9._-]*$ ]]; then
+  echo "invalid --agent-name (英数字・ハイフン・アンダースコア・ドットのみ): '$AGENT_NAME'" >&2; exit 1
+fi
+
+# --patch-agent も同じ経路でファイル名になる
+for _n in ${PATCH_AGENTS+"${PATCH_AGENTS[@]}"}; do
+  case "$_n" in
+    ""|.|..|*/*|*\\*|-*) echo "invalid --patch-agent: '$_n'" >&2; exit 1 ;;
+  esac
+done
+
 say()  { printf '  %s\n' "$*"; }
 run()  { if [[ $DRY -eq 1 ]]; then printf '  [dry] %s\n' "$*"; else eval "$@"; fi; }
 # --force で既存を上書きする前に退避する。編集していた人の内容を無言で消さないため
