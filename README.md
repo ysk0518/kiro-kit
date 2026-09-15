@@ -2,24 +2,6 @@
 
 kiro-cli に「セッションをまたいで覚えている」「毎回同じ指示をしなくて済む」レイヤーを足すキット。
 
-kiro-cli には steering / skills / hooks の下地が入っているが、既定では**全部空**なので何も起きない。
-このキットはその空き枠を埋めたうえで、**永続メモリを足す**。
-
-永続メモリは kiro-cli の純正機能ではない
-（[Feature Request #6988](https://github.com/kirodotdev/Kiro/issues/6988) として要望が出ている段階）。
-近いものに実験的機能の knowledge base があるが、あれは**検索して初めて出てくる**ストアで、
-黙っていても効く記憶ではない。
-
-| | 純正の knowledge base | kiro-kit の memory |
-|---|---|---|
-| 位置づけ | 実験的機能（要有効化） | steering の上に構築 |
-| 出てくるとき | 意味検索したとき | **毎回自動で入る**（索引が steering） |
-| 単位 | ファイル・ディレクトリ単位 | 1ファイル1事実 |
-| 引き方 | 意味検索のみ | 索引 → grep → grep → 意味検索 |
-
-kiro-kit は knowledge base を否定しない。記憶の本文は KB にも登録して、
-索引で当たらないときの最後の手段として使う。
-
 ## これを入れると変わること
 
 | 前 | 後 |
@@ -39,7 +21,7 @@ kiro-kit は knowledge base を否定しない。記憶の本文は KB にも登
 ## 入れかた
 
 ```bash
-git clone <このリポジトリ> && cd kiro-kit
+git clone https://github.com/ysk0518/kiro-kit && cd kiro-kit
 ./install.sh
 kiro-cli chat --agent kit
 ```
@@ -64,38 +46,11 @@ kiro-cli agent set-default kit          # または ./install.sh --set-default
 ```
 
 このとき **`allowedTools` は変更しない**。承認の要否は各自の設定のままにする。
-毎回の承認を減らしたいなら明示的に:
-
-```bash
-./install.sh --no-agent --patch-agent my-agent --relax-tools
-```
-
-`--relax-tools` は `fs_write` と `execute_bash` を自動承認に加えるので、
-何を許すことになるか理解したうえで使うこと。
+毎回の承認を減らしたいなら `--relax-tools` を明示する（`fs_write` と `execute_bash` が
+自動承認になるので、何を許すか理解したうえで使うこと）。
 
 既存の skill / steering / agent は**上書きしない**（`--force` で上書き）。
 何をするか見るだけなら `--dry-run`。agent 名を変えたいなら `--agent-name`。
-
-## 元に戻す
-
-```bash
-./uninstall.sh              # 何が消えるか確認してから削除
-./uninstall.sh --dry-run    # 確認だけ
-```
-
-**記憶（`~/.kiro/memory/`）と `kit.env` は消さない。** あなたが書いたデータなので、
-入れ直せばそのまま使える。完全に消すなら `--purge`。
-
-`--patch-agent` で書き換えた agent は、`~/.kiro/agents/*.bak.*` から戻せる。
-
-## 更新するとき
-
-```bash
-git pull && ./install.sh --force
-```
-
-`--force` は skills / steering / agent を上書きするが、**上書き前に `.bak.<日時>` へ退避する**ので、
-自分で書き足した内容は失われない。有効化済みの `10-team-rules.md` は対象外。
 
 ## 使いかた
 
@@ -136,10 +91,23 @@ KB を最後にしているのは、**意味検索が万能ではない**ため�
 主題から外れた内容は引けなかった。grep は言い換えに弱い代わりに取りこぼさないので、
 言葉が分かっているうちは grep の方が確実。
 
-### 記憶が増えてきたら
+### チーム共通ルールを効かせる
+
+```bash
+mv ~/.kiro/steering/10-team-rules.md.example ~/.kiro/steering/10-team-rules.md
+```
+
+ここに書いたことは全員の全セッションに入る。
+**毎回言っているのに毎回守られないこと**だけを書く。たまにしか要らないことを書くと
+コンテキストを食うだけなので書かない。
+
+## 記憶が増えてきたら
 
 放っておくと重複した記憶が溜まり、サマリが長くなって索引を圧迫する。
-棚卸しの材料は機械的に出せる:
+
+### 棚卸しする
+
+材料は機械的に出せる:
 
 ```bash
 ~/.kiro/bin/kiro-memory doctor        # 重複候補・古い記憶・長すぎるサマリ
@@ -147,19 +115,23 @@ KB を最後にしているのは、**意味検索が万能ではない**ため�
 ```
 
 doctor が出すのは**候補であって判断ではない**。重複候補に挙がったペアが
-同じアプリの別課題だった、ということは普通に起きる。`memory-gc` 側で本文を
-読んで精査する前提になっている。
+同じアプリの別課題だった、ということは普通に起きる。実際の統合・更新・短縮は
+`memory-gc` skill が本文を読んで精査する。
 
-記憶が 50 件を超えると、セッション開始時に棚卸しを促すようになる
-（閾値は `KIRO_MEMORY_GC_THRESHOLD` で変更可能）。
-実際の統合・更新・短縮は `memory-gc` skill が担当する。
+50 件を超えるとセッション開始時に棚卸しを促すようになる
+（閾値は `KIRO_MEMORY_GC_THRESHOLD`）。
 
-### 索引が長くなってきたら
+**`memory-gc` は勝手に消さない。** 削除と統合は必ず確認を取ってから実行する。
+記憶が消えたことに気づくのは、それが必要になった瞬間だから。
 
-索引に載せる件数に上限をかけられる（既定は無制限）:
+> 11 件の記憶で走らせたときは、重複候補に挙がったペアを「同じアプリの別課題」と
+> 判断して統合せず、短縮候補も大半を「検索の手がかりが残っているので現状維持が妥当」と
+> 却下したうえで、1件だけ提案して承認待ちで停止した。記憶は1バイトも変更されなかった。
+
+### 索引に上限をかける
 
 ```bash
-export KIRO_MEMORY_INDEX_MAX=40    # project/reference は新しい順に40件まで
+export KIRO_MEMORY_INDEX_MAX=40    # project/reference は新しい順に40件まで（既定は無制限）
 ```
 
 - **`feedback` と `user` は上限の対象外** — 件数が少なく、あなたの好みや役割という
@@ -171,22 +143,20 @@ export KIRO_MEMORY_INDEX_MAX=40    # project/reference は新しい順に40件�
 古い記憶ほど落ちる方式なので、**長く変わらない重要な事実**（環境の落とし穴など）が
 省略されることがある。それでも grep で確実に引けるようにフル索引を用意している。
 
-**`memory-gc` は勝手に消さない。** 削除と統合は必ず確認を取ってから実行する。
-記憶が消えたことに気づくのは、それが必要になった瞬間だから。
-
-実際に 11 件の記憶で走らせたときは、重複候補に挙がったペアを「同じアプリの別課題」と
-判断して統合せず、短縮候補も大半を「検索の手がかりが残っているので現状維持が妥当」と
-却下したうえで、1件だけ提案して承認待ちで停止した。記憶は1バイトも変更されなかった。
-
-### チーム共通ルールを効かせる
+## 更新とアンインストール
 
 ```bash
-mv ~/.kiro/steering/10-team-rules.md.example ~/.kiro/steering/10-team-rules.md
+git pull && ./install.sh --force    # 更新
+./uninstall.sh --dry-run            # 何が消えるか確認
+./uninstall.sh                      # アンインストール
 ```
 
-ここに書いたことは全員の全セッションに入る。
-**毎回言っているのに毎回守られないこと**だけを書く。たまにしか要らないことを書くと
-コンテキストを食うだけなので書かない。
+`--force` は skills / steering / agent を上書きするが、**上書き前に `.bak.<日時>` へ退避する**ので、
+自分で書き足した内容は失われない。有効化済みの `10-team-rules.md` は対象外。
+
+アンインストールは**記憶（`~/.kiro/memory/`）と `kit.env` を消さない**。あなたが書いたデータなので、
+入れ直せばそのまま使える。完全に消すなら `--purge`。
+`--patch-agent` で書き換えた agent は `~/.kiro/agents/*.bak.*` から戻せる。
 
 ## 何がどこに置かれるか
 
@@ -199,7 +169,7 @@ mv ~/.kiro/steering/10-team-rules.md.example ~/.kiro/steering/10-team-rules.md
 ├── memory/<slug>.md           1ファイル1事実の永続メモリ
 ├── skills/<name>/SKILL.md     remember / recall / memory-gc / start-work / save-log / morning-check
 ├── bin/
-│   ├── kiro-memory            記憶の追加・削除・索引生成
+│   ├── kiro-memory            記憶の追加・削除・索引生成・棚卸し材料
 │   ├── hook-session-start     agentSpawn: git状態と直近ログを注入
 │   └── hook-remember-nudge    userPromptSubmit: 記憶の依頼を検知して手順を注入
 ├── agents/kit.json            hooks と記憶KBを有効にした agent（CLI 用）
@@ -207,43 +177,46 @@ mv ~/.kiro/steering/10-team-rules.md.example ~/.kiro/steering/10-team-rules.md
 └── kit.env                    環境依存の設定（作業ログの場所など）
 ```
 
-## 安全側の作り
+## なぜ作ったか — 純正には「記憶」が無い
 
-配布物として他人の環境で動くので、入力がそのままパスになる箇所は検証している。
+kiro-cli の純正機能は steering / skills / hooks の3つで、既定では**全部空**。
+**永続メモリは実装されていない**（[Feature Request #6988](https://github.com/kirodotdev/Kiro/issues/6988)
+として要望が出ている段階）。近いものに実験的機能の knowledge base があるが、
+あれは**検索して初めて出てくる**ストアで、黙っていても効く記憶ではない。
 
-- **slug と agent 名はパス区切りを弾く。** 英数字・ハイフン・アンダースコア・ドットのみ。
-  `../` を含む slug で `~/.kiro/memory/` の外にファイルを書いたり消したりできない。
-  記憶はモデルが自動で書くので、会話の内容がそのまま slug になりうるため。
-- **`--force` は上書き前に `.bak.<日時>` へ退避する。**
-- **`--patch-agent` は `allowedTools` を変更しない。** 承認の要否は各自の設定のまま
-  （`--relax-tools` を明示したときだけ広げる）。
-- **`memory-gc` は記憶を勝手に消さない。** 削除と統合は承認を取ってから。
-- **`uninstall.sh` は記憶と `kit.env` を残す。** 全部消すなら `--purge`。
-- **設定ファイルを `source` しない。** `kit.env` は必要なキーだけ読み取って値として扱う。
-  `source` すると設定ファイルの中身がそのまま実行されるので、そこに仕込まれた文字列が
-  次のセッション開始時に走ってしまう。書き込む側（`--work-log-dir`）でも値を検証している。
-- **`install.sh` は `eval` を使わない。** コマンドは配列のまま実行するので、
-  引数に空白や記号が入ってもシェルに解釈されない。
+| | 純正の knowledge base | kiro-kit の memory |
+|---|---|---|
+| 位置づけ | 実験的機能（要有効化） | steering の上に構築 |
+| 出てくるとき | 意味検索したとき | **毎回自動で入る**（索引が steering） |
+| 単位 | ファイル・ディレクトリ単位 | 1ファイル1事実 |
+| 引き方 | 意味検索のみ | 索引 → grep → grep → 意味検索 |
 
-## 仕組みとハマりどころ
+否定しているわけではない。記憶の本文は KB にも登録して、索引で当たらないときの
+最後の手段として使う。
 
-kiro-cli の実装を調べて分かったことで、公式ドキュメントに書かれていない点:
+Claude Code を使っているなら、**あの `/memory` を kiro-cli に移植したもの**と考えてよい。
+`~/.claude/projects/<project>/memory/` と `MEMORY.md` が、
+`~/.kiro/memory/` と `steering/00-memory-index.md` に対応する。
+
+## kiro-cli の仕様で分かったこと
+
+公式ドキュメントに書かれていない、実測で確かめた点:
 
 - **steering は `inclusion: always` しか読まれない。**
   `manual` / `fileMatch` を指定したファイルは CLI 側で明示的に除外される
-  (Kiro IDE とは挙動が違う)。常時効かせたいなら always にする。
+  （Kiro IDE とは挙動が違う）。常時効かせたいなら always にする。
 
 - **グローバルの steering と skills は自動でロードされる。**
   agent の `resources` に書く必要はない。KB 登録が要るのは意味検索したいときだけ。
 
-- **hooks は agent 設定 (`~/.kiro/agents/<name>.json`) にしか書けない。**
+- **hooks は agent 設定（`~/.kiro/agents/<name>.json`）にしか書けない。**
   グローバルな置き場所がないので、agent ごとに入れる必要がある
-  (install.sh が `kit` agent を作るのも、`--patch-agent` があるのもこのため)。
+  （install.sh が `kit` agent を作るのも、`--patch-agent` があるのもこのため）。
   トリガーは `agentSpawn` / `userPromptSubmit` / `preToolUse` / `postToolUse` / `stop` の5種。
 
 - **組み込みの `kiro_default` では hooks が効かない。**
   設定ファイルを持たない agent なので、hooks の書きようがない。
-  `--agent` を付けずに起動すると、こうなる（実測）:
+  `--agent` を付けずに起動すると、こうなる:
 
   | | `kiro_default` | 自前の agent |
   |---|---|---|
@@ -256,7 +229,7 @@ kiro-cli の実装を調べて分かったことで、公式ドキュメント�
   取りこぼすのは hooks と KB 検索だけなので、実害を感じないなら既定のままでも困らない。
   全部有効にするなら `kiro-cli agent set-default kit`。
 
-- **フックが受け取る入力の形（実測）:**
+- **フックが受け取る入力の形:**
   ```
   stdin: {"hook_event_name":"userPromptSubmit","cwd":"...","prompt":"..."}
   env  : USER_PROMPT, KIRO_SESSION_ID
@@ -264,6 +237,27 @@ kiro-cli の実装を調べて分かったことで、公式ドキュメント�
   `USER_PROMPT` は**環境変数**であって stdin の JSON キーではない（キーは `prompt`）。
   取り違えるとフックは「成功」扱いのまま何も出力しないので気づきにくい。
   標準出力がそのままモデルに渡り、exit 0 が正常。
+
+- **`awk` の `length()` は環境によってバイト数を返す。**
+  macOS の awk（20200816）は UTF-8 非対応で、日本語が約1.6倍に膨らむ（76文字が120と出る）。
+  ロケールを変えても直らない。文字数を数えるならシェルの `${#var}` を使う。
+
+## 安全側の作り
+
+配布物として他人の環境で動くので、外から来た値がパスや設定に流れ込む箇所は検証している。
+
+- **slug と agent 名はパス区切りを弾く。** 英数字・ハイフン・アンダースコア・ドットのみ。
+  `../` を含む slug で `~/.kiro/memory/` の外にファイルを書いたり消したりできない。
+  記憶はモデルが自動で書くので、会話の内容がそのまま slug になりうるため。
+- **設定ファイルを `source` しない。** `kit.env` は必要なキーだけ読み取って値として扱う。
+  `source` すると設定ファイルの中身がそのまま実行されるので、そこに仕込まれた文字列が
+  次のセッション開始時に走ってしまう。書き込む側（`--work-log-dir`）でも値を検証している。
+- **`install.sh` は `eval` を使わない。** コマンドは配列のまま実行するので、
+  引数に空白や記号が入ってもシェルに解釈されない。
+- **`--force` は上書き前に `.bak.<日時>` へ退避する。**
+- **`--patch-agent` は `allowedTools` を変更しない。** 承認の要否は各自の設定のまま。
+- **`memory-gc` は記憶を勝手に消さない。** 削除と統合は承認を取ってから。
+- **`uninstall.sh` は記憶と `kit.env` を残す。** 全部消すなら `--purge`。
 
 ## Kiro IDE で使う
 
@@ -302,14 +296,12 @@ IDE は `inclusion` の全モード（`always` / `fileMatch` / `manual` / `auto`
 出し分けたいなら、IDE 専用と割り切った別ファイルとして各自のワークスペース
 （`.kiro/steering/`）に置く。
 
-## 期待値について
+## 期待値と、含めていないもの
 
 steering と hooks は確実に効く。一方 **memory は書かないと貯まらない**。
 フックと steering で書くよう仕向けてはいるが、モデルが「これは記憶すべきだ」と
 判断するかは毎回の運次第なので、最初のうちは詰まったときに
 「今のを覚えといて」と明示的に言った方が確実に貯まる。10件ほど貯まると効きが変わる。
-
-## 触っていない領域
 
 kiro-cli には他に `subagent`（DAGで並列実行）、`/plan`、`task`、`powers` がある。
 これらは「毎回効く土台」ではなく「使うと強い道具」なので、このキットには含めていない。
